@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Bloom Arcana — QR→AR demo</title>
+<style>
+  html,body { height:100%; margin:0; background:#111; color:#fff; font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue"; }
+  #app { position:relative; width:100%; height:100vh; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+  video#cam { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); } /* mirror for natural phone preview */
+  canvas#overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  #ui { position:absolute; top:12px; left:12px; z-index:40; display:flex; gap:8px; align-items:center; }
+  .hint { background:rgba(0,0,0,0.45); padding:6px 10px; border-radius:8px; font-size:13px; }
+  #scene { position:absolute; z-index:30; pointer-events:none; transform-origin:0 0; will-change:transform,opacity; }
+  .card { position:absolute; width:140px; transform-origin:center bottom; opacity:0; will-change:transform,opacity; }
+  .flower { position:absolute; width:300px; opacity:0; transform-origin:center center; will-change:transform,opacity; }
+  /* card animation states (activated via .active class and JS sequencing) */
+  @keyframes riseCard {
+    0% { transform: translateY(40px) rotateX(30deg) scale(0.9); opacity:0; }
+    60% { transform: translateY(-6px) rotateX(0deg) scale(1.02); opacity:1; }
+    100%{ transform: translateY(0) rotateX(0) scale(1); opacity:1; }
+  }
+  @keyframes fadeOut {
+    0% { opacity:1; transform:scale(1); }
+    100%{ opacity:0; transform:scale(0.95); }
+  }
+  @keyframes flowerIn {
+    0% { opacity:0; transform:translateY(20px) scale(0.9); }
+    60%{ opacity:1; transform:translateY(-6px) scale(1.02); }
+    100%{ opacity:1; transform:translateY(0) scale(1); }
+  }
+  @keyframes floatY {
+    0% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+    100%{ transform: translateY(0); }
+  }
+  .card.show { animation: riseCard 520ms cubic-bezier(.2,.9,.2,1) forwards; }
+  .card.hide { animation: fadeOut 320ms ease forwards; }
+  .flower.show { animation: flowerIn 640ms cubic-bezier(.2,.9,.2,1) forwards; }
+  .flower.float { animation: floatY 3000ms ease-in-out infinite; }
+  /* fallback center-play */
+  #fallbackNotice { position:absolute; bottom:18px; left:50%; transform:translateX(-50%); z-index:45; background:rgba(0,0,0,0.45); padding:8px 12px;border-radius:10px; font-size:13px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <video id="cam" autoplay playsinline muted></video>
+  <canvas id="overlay"></canvas>
+
+  <div id="ui">
+    <div class="hint" id="status">カメラ準備中…</div>
+    <div class="hint">QRをフレームに収めてください</div>
+  </div>
+
+  <!-- scene container that will be positioned against the QR -->
+  <div id="scene" style="left:0; top:0; width:300px; height:180px;">
+    <!-- three cards (replace src with your real images) -->
+    <img id="card1" class="card" src="./cosmos/moon.png" style="left:-180px; bottom:0; width:160px;" />
+    <img id="card2" class="card" src="./cosmos/devil.png" style="left:0px; bottom:0; width:160px;" />
+    <img id="card3" class="card" src="./cosmos/page-of-cups.png" style="left:180px; bottom:0; width:160px;" />
+    <!-- flower -->
+    <img id="flower" class="flower" src="./cosmos/cosmos.png" style="left: -60px; top:-120px; width:360px;" />
+  </div>
+
+  <div id="fallbackNotice" style="display:none">QR検出できません — 画面中央で体験を再生します</div>
+</div>
+
+<!-- jsQR from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+
+<script>
+(async function(){
+  const video = document.getElementById('cam');
+  const canvas = document.getElementById('overlay');
+  const ctx = canvas.getContext('2d');
+  const status = document.getElementById('status');
+  const scene = document.getElementById('scene');
+  const fallbackNotice = document.getElementById('fallbackNotice');
+
+  const cardEls = [document.getElementById('card1'), document.getElementById('card2'), document.getElementById('card3')];
+  const flowerEl = document.getElementById('flower');
+
+  // timing params (ms)
+  const t_cardGap = 420;
+  const t_afterCards = 380;
+  const QR_MISS_THRESHOLD = 1500; // ms - when to fallback
+
+  // setup camera
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio:false });
+    video.srcObject = stream;
+    await video.play();
+  } catch (e) {
+    status.textContent = 'カメラが使えません。HTTPSもしくは許可を確認してください。';
+    console.error(e);
+    return;
+  }
+
+  // resize canvas on each frame
+  function resize() {
+    canvas.width = video.videoWidth || window.innerWidth;
+    canvas.height = video.videoHeight || window.innerHeight;
+  }
+  video.addEventListener('loadedmetadata', resize);
+  window.addEventListener('resize', resize);
+
+  // convert canvas coords to screen coords (video is mirrored horizontally)
+  function drawCorners(corners){
+    ctx.clearRect(0,0,canvas.width, canvas.height);
+    if(!corners) return;
+    ctx.strokeStyle = 'rgba(0,200,255,0.9)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(corners.topLeft.x, corners.topLeft.y);
+    ctx.lineTo(corners.topRight.x, corners.topRight.y);
+    ctx.lineTo(corners.bottomRight.x, corners.bottomRight.y);
+    ctx.lineTo(corners.bottomLeft.x, corners.bottomLeft.y);
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  // compute bounding box, scale and rotation from qr corners
+  function placeScene(quad) {
+    // average top-left
+    const tl = quad.topLeft;
+    const tr = quad.topRight;
+    const bl = quad.bottomLeft;
+    // width approximated by top edge
+    const width = Math.hypot(tr.x - tl.x, tr.y - tl.y);
+    const height = Math.hypot(bl.x - tl.x, bl.y - tl.y);
+
+    // rotation angle (deg)
+    const angle = Math.atan2(tr.y - tl.y, tr.x - tl.x) * 180 / Math.PI;
+
+    // desired scene size: tune multiplier to visual
+    const sceneWidth = width * 1.6; // expand a bit so cards sit above QR
+    const sceneHeight = height * 2.6;
+
+    // position scene centered on qr center
+    const cx = (tl.x + tr.x + bl.x + quad.bottomRight.x) / 4;
+    const cy = (tl.y + tr.y + bl.y + quad.bottomRight.y) / 4;
+
+    // place scene's top-left so that center aligns (account for transform-origin: 0 0)
+    const left = cx - sceneWidth / 2;
+    const top = cy - sceneHeight * 0.6; // lift upwards so cards float above
+
+    scene.style.width = sceneWidth + 'px';
+    scene.style.height = sceneHeight + 'px';
+    scene.style.left = left + 'px';
+    scene.style.top  = top  + 'px';
+    scene.style.transform = `rotate(${angle}deg) scale(${sceneWidth / 300})`; // 300 is base size
+  }
+
+  // sequence play: cards rise left->center->right, disappear, flower appears+float
+  let playing = false;
+  function playSequence() {
+    if (playing) return;
+    playing = true;
+    fallbackNotice.style.display = 'none';
+
+    // reset states
+    cardEls.forEach(c => { c.classList.remove('show','hide'); c.style.opacity = 0; });
+    flowerEl.classList.remove('show','float'); flowerEl.style.opacity = 0;
+
+    // sequence with timeouts
+    cardEls.forEach((c, idx) => {
+      setTimeout(()=> c.classList.add('show'), idx * t_cardGap);
+    });
+
+    // hide cards after all shown
+    const totalCardsTime = (cardEls.length - 1) * t_cardGap + 600;
+    setTimeout(()=>{
+      cardEls.forEach(c => c.classList.add('hide'));
+    }, totalCardsTime + t_afterCards);
+
+    // flower appears after cards faded
+    setTimeout(()=>{
+      flowerEl.classList.add('show');
+      setTimeout(()=> flowerEl.classList.add('float'), 700);
+      // finish playing after a while
+      setTimeout(()=>{ playing = false; }, 3000);
+    }, totalCardsTime + t_afterCards + 360);
+  }
+
+  // fallback central play (if QR not seen)
+  function fallbackPlayCenter() {
+    // place scene at center
+    const w = canvas.width, h = canvas.height;
+    const sceneWidth = Math.min(600, w * 0.6);
+    const sceneHeight = sceneWidth * 0.6;
+    const left = (w - sceneWidth) / 2;
+    const top  = (h - sceneHeight) / 2;
+    scene.style.width = sceneWidth + 'px';
+    scene.style.height = sceneHeight + 'px';
+    scene.style.left = left + 'px';
+    scene.style.top  = top  + 'px';
+    scene.style.transform = `rotate(0deg) scale(1)`;
+    fallbackNotice.style.display = 'block';
+    playSequence();
+  }
+
+  // main loop: draw video frame to canvas, run jsQR
+  let lastQRTime = performance.now();
+  const scanLoop = () => {
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      // draw to temp canvas (use overlay)
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0,0,canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+      if (code) {
+        lastQRTime = performance.now();
+        status.textContent = 'QR検出済。ポスター上に配置中…';
+        // get corners in canvas coords (jsQR gives location)
+        const quad = {
+          topLeft: code.location.topLeftCorner,
+          topRight: code.location.topRightCorner,
+          bottomRight: code.location.bottomRightCorner,
+          bottomLeft: code.location.bottomLeftCorner
+        };
+        drawCorners(quad);
+        placeScene(quad);
+        // trigger the sequence occasionally
+        if (!playing) playSequence();
+      } else {
+        // not found
+        ctx.clearRect(0,0,canvas.width, canvas.height);
+        status.textContent = 'QRをフレームに合わせてください';
+        // if no QR for threshold, fallback to center-play (only occasionally)
+        if (performance.now() - lastQRTime > QR_MISS_THRESHOLD && !playing) {
+          fallbackPlayCenter();
+          lastQRTime = performance.now(); // prevent repeating too often
+        }
+      }
+    }
+    requestAnimationFrame(scanLoop);
+  };
+
+  // start loop once video is playing
+  video.addEventListener('playing', () => {
+    resize();
+    requestAnimationFrame(scanLoop);
+    status.textContent = 'カメラ起動。QRを読み取ってください。';
+  });
+})();
+</script>
+</body>
+</html>
