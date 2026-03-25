@@ -80,7 +80,7 @@
     moon.position.set(-0.42,  0.15, 0.02);
     devilR.position.set(0.00, 0.20, 0.01);
     page.position.set( 0.42,  0.15, 0.02);
-    flower.position.set(0.00, 0.55, 0.0);
+    flower.position.set(0.00, -0.45, 0.0);
 
     anchor.group.add(moon);
     anchor.group.add(devilR);
@@ -109,17 +109,17 @@
       });
 
       // 1) Moon — slow fade in
-      tween(1400, easeOutCubic, k => {
+      tween(1200, easeOutCubic, k => {
         moon.scale.set(0.01 + 0.99*k, 0.01 + 0.99*k, 1);
         moon.material.opacity = k;
       }, () => {
         // 2) Devil(R)
-        tween(1400, easeOutCubic, k => {
+        tween(1200, easeOutCubic, k => {
           devilR.scale.set(0.01 + 0.99*k, 0.01 + 0.99*k, 1);
           devilR.material.opacity = k;
         }, () => {
           // 3) Page of Cups
-          tween(1400, easeOutCubic, k => {
+          tween(1200, easeOutCubic, k => {
             page.scale.set(0.01 + 0.99*k, 0.01 + 0.99*k, 1);
             page.material.opacity = k;
           }, () => {
@@ -145,7 +145,7 @@
               };
               pulse();
             });
-            }, 1000); // 1 second pause before flower
+            }, 450); // 0.45 second pause before flower
           });
         });
       });
