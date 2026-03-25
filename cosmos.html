@@ -93,46 +93,55 @@
 <div id="cam-error"></div>
 
 <script>
-  // Start rear camera
-  (async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-        audio: false
-      });
-      document.getElementById('cam').srcObject = stream;
-    } catch(e) {
-      document.getElementById('cam-error').style.display = 'block';
-      document.getElementById('cam-error').textContent = 'Camera unavailable — preview mode';
-    }
-  })();
-
   const cardEls = [
     document.getElementById('card1'),
     document.getElementById('card2'),
     document.getElementById('card3')
   ];
   const flowerEl = document.getElementById('flower');
+  const cam = document.getElementById('cam');
 
   const t_cardGap = 420;
   const t_afterCards = 380;
 
-  // 1) Cards rise one by one
-  cardEls.forEach((c, idx) => {
-    setTimeout(() => c.classList.add('show'), 800 + idx * t_cardGap);
-  });
+  function playSequence() {
+    // 1) Cards rise one by one
+    cardEls.forEach((c, idx) => {
+      setTimeout(() => c.classList.add('show'), idx * t_cardGap);
+    });
 
-  // 2) Cards fade out
-  const totalCardsTime = 800 + (cardEls.length - 1) * t_cardGap + 600;
-  setTimeout(() => {
-    cardEls.forEach(c => c.classList.add('hide'));
-  }, totalCardsTime + t_afterCards);
+    // 2) Cards fade out
+    const totalCardsTime = (cardEls.length - 1) * t_cardGap + 600;
+    setTimeout(() => {
+      cardEls.forEach(c => c.classList.add('hide'));
+    }, totalCardsTime + t_afterCards);
 
-  // 3) Flower blooms and floats forever
-  setTimeout(() => {
-    flowerEl.classList.add('show');
-    setTimeout(() => flowerEl.classList.add('float'), 700);
-  }, totalCardsTime + t_afterCards + 360);
+    // 3) Flower blooms and floats forever
+    setTimeout(() => {
+      flowerEl.classList.add('show');
+      setTimeout(() => flowerEl.classList.add('float'), 700);
+    }, totalCardsTime + t_afterCards + 360);
+  }
+
+  // Start rear camera, THEN play animation after camera is ready
+  (async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false
+      });
+      cam.srcObject = stream;
+      // Wait for camera to actually show frames
+      cam.addEventListener('playing', () => {
+        setTimeout(playSequence, 500);
+      }, { once: true });
+    } catch(e) {
+      document.getElementById('cam-error').style.display = 'block';
+      document.getElementById('cam-error').textContent = 'Camera unavailable — preview mode';
+      // Play anyway without camera
+      playSequence();
+    }
+  })();
 </script>
 </body>
 </html>
