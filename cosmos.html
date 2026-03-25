@@ -8,7 +8,7 @@
   html,body {
     height:100%; margin:0; overflow:hidden;
     background:#000; color:#fff;
-    font-family: 'Georgia', 'Times New Roman', serif;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue";
   }
   /* Camera fullscreen background */
   video#cam {
@@ -17,76 +17,61 @@
     object-fit:cover;
     z-index:0;
   }
-  /* Overlay on top of camera */
-  #overlay {
+  /* Scene overlay on camera */
+  #scene {
     position:fixed; inset:0;
     z-index:10;
     display:flex; flex-direction:column;
     align-items:center; justify-content:center;
     pointer-events:none;
   }
-  .cards {
-    display:flex; gap:10px; justify-content:center;
-    margin-bottom:24px;
-  }
   .card {
-    width:100px; opacity:0;
-    border-radius:6px;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
-    transform: translateY(40px) scale(0.9);
+    position:absolute;
+    width:140px;
+    transform-origin:center bottom;
+    opacity:0;
+    will-change:transform,opacity;
   }
-  .card.show {
-    animation: riseCard 700ms cubic-bezier(.2,.9,.2,1) forwards;
+  .flower {
+    position:absolute;
+    width:300px;
+    opacity:0;
+    transform-origin:center center;
+    will-change:transform,opacity;
   }
-  .flower-wrap {
-    opacity:0; text-align:center;
-    transform: translateY(20px) scale(0.9);
+  /* Card rise in */
+  @keyframes riseCard {
+    0%   { transform: translateY(40px) rotateX(30deg) scale(0.9); opacity:0; }
+    60%  { transform: translateY(-6px) rotateX(0deg) scale(1.02); opacity:1; }
+    100% { transform: translateY(0) rotateX(0) scale(1); opacity:1; }
   }
-  .flower-wrap.show {
-    animation: flowerIn 900ms cubic-bezier(.2,.9,.2,1) forwards;
+  /* Card fade out */
+  @keyframes fadeOut {
+    0%   { opacity:1; transform:scale(1); }
+    100% { opacity:0; transform:scale(0.95); }
   }
-  .flower-wrap.float {
-    animation: floatY 3s ease-in-out infinite;
+  /* Flower bloom in */
+  @keyframes flowerIn {
+    0%   { opacity:0; transform:translateY(20px) scale(0.85); }
+    60%  { opacity:1; transform:translateY(-8px) scale(1.05); }
+    100% { opacity:1; transform:translateY(0) scale(1); }
   }
-  .flower-wrap img {
-    width:min(240px, 60vw);
-    filter: drop-shadow(0 4px 20px rgba(255,182,193,0.4));
+  /* Flower gentle float */
+  @keyframes floatY {
+    0%   { transform: translateY(0); }
+    50%  { transform: translateY(-8px); }
+    100% { transform: translateY(0); }
   }
-  .message {
-    margin-top:20px; font-size:13px;
-    letter-spacing:0.08em; opacity:0;
-    text-align:center; line-height:1.8;
-    color:rgba(255,255,255,0.85);
-    text-shadow: 0 1px 8px rgba(0,0,0,0.7);
-  }
-  .message.show {
-    animation: fadeIn 800ms ease forwards;
-  }
-  /* Fallback if camera fails */
+  .card.show { animation: riseCard 520ms cubic-bezier(.2,.9,.2,1) forwards; }
+  .card.hide { animation: fadeOut 320ms ease forwards; }
+  .flower.show { animation: flowerIn 640ms cubic-bezier(.2,.9,.2,1) forwards; }
+  .flower.float { animation: floatY 3000ms ease-in-out infinite; }
+
   #cam-error {
     display:none; position:fixed; bottom:20px; left:50%;
     transform:translateX(-50%); z-index:20;
     background:rgba(0,0,0,0.6); padding:8px 14px;
-    border-radius:8px; font-size:12px;
-  }
-
-  @keyframes fadeIn {
-    from { opacity:0; } to { opacity:1; }
-  }
-  @keyframes riseCard {
-    0% { transform: translateY(40px) scale(0.9); opacity:0; }
-    60% { transform: translateY(-6px) scale(1.02); opacity:1; }
-    100%{ transform: translateY(0) scale(1); opacity:1; }
-  }
-  @keyframes flowerIn {
-    0% { opacity:0; transform:translateY(20px) scale(0.9); }
-    60%{ opacity:1; transform:translateY(-6px) scale(1.05); }
-    100%{ opacity:1; transform:translateY(0) scale(1); }
-  }
-  @keyframes floatY {
-    0% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
-    100%{ transform: translateY(0); }
+    border-radius:8px; font-size:12px; color:#fff;
   }
 </style>
 </head>
@@ -94,25 +79,21 @@
 
 <video id="cam" autoplay playsinline muted></video>
 
-<div id="overlay">
-  <div class="cards">
-    <img id="card1" class="card" src="./cosmos/moon.png" alt="The Moon" />
-    <img id="card2" class="card" src="./cosmos/devil.png" alt="The Devil Reverse" />
-    <img id="card3" class="card" src="./cosmos/page-of-cups.png" alt="Page of Cups" />
-  </div>
-  <div id="flower" class="flower-wrap">
-    <img src="./cosmos/cosmos.png" alt="Cosmos Flower" />
-  </div>
-  <p id="msg" class="message">
-    The Moon — The Devil (R) — Page of Cups<br/>
-    Let go, or believe?
-  </p>
+<div id="scene">
+  <img id="card1" class="card" src="./cosmos/moon.png" alt="The Moon"
+       style="top:28%; left:calc(50% - 190px);" />
+  <img id="card2" class="card" src="./cosmos/devil.png" alt="The Devil Reverse"
+       style="top:24%; left:calc(50% - 70px);" />
+  <img id="card3" class="card" src="./cosmos/page-of-cups.png" alt="Page of Cups"
+       style="top:28%; left:calc(50% + 50px);" />
+  <img id="flower" class="flower" src="./cosmos/cosmos.png" alt="Cosmos"
+       style="top:42%; left:calc(50% - 150px);" />
 </div>
 
 <div id="cam-error"></div>
 
 <script>
-  // Start camera (rear-facing)
+  // Start rear camera
   (async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -121,31 +102,37 @@
       });
       document.getElementById('cam').srcObject = stream;
     } catch(e) {
-      // Camera failed — show dark background, animation still plays
       document.getElementById('cam-error').style.display = 'block';
-      document.getElementById('cam-error').textContent = 'Camera unavailable — enjoying in preview mode';
+      document.getElementById('cam-error').textContent = 'Camera unavailable — preview mode';
     }
   })();
 
-  // Animation sequence
-  const cards = [document.getElementById('card1'), document.getElementById('card2'), document.getElementById('card3')];
-  const flower = document.getElementById('flower');
-  const msg = document.getElementById('msg');
+  const cardEls = [
+    document.getElementById('card1'),
+    document.getElementById('card2'),
+    document.getElementById('card3')
+  ];
+  const flowerEl = document.getElementById('flower');
 
-  cards.forEach((card, i) => {
-    setTimeout(() => card.classList.add('show'), 1200 + i * 700);
+  const t_cardGap = 420;
+  const t_afterCards = 380;
+
+  // 1) Cards rise one by one
+  cardEls.forEach((c, idx) => {
+    setTimeout(() => c.classList.add('show'), 800 + idx * t_cardGap);
   });
 
-  const afterCards = 1200 + cards.length * 700 + 500;
-
+  // 2) Cards fade out
+  const totalCardsTime = 800 + (cardEls.length - 1) * t_cardGap + 600;
   setTimeout(() => {
-    flower.classList.add('show');
-    setTimeout(() => flower.classList.add('float'), 1000);
-  }, afterCards);
+    cardEls.forEach(c => c.classList.add('hide'));
+  }, totalCardsTime + t_afterCards);
 
+  // 3) Flower blooms and floats forever
   setTimeout(() => {
-    msg.classList.add('show');
-  }, afterCards + 900);
+    flowerEl.classList.add('show');
+    setTimeout(() => flowerEl.classList.add('float'), 700);
+  }, totalCardsTime + t_afterCards + 360);
 </script>
 </body>
 </html>
