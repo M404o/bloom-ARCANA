@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <title>Cosmos AR Poem Card — WebAR</title>
+  <style>
+    html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif}
+    #ui{
+      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(180deg, rgba(0,0,0,.65), rgba(0,0,0,.35));
+      z-index:10; color:#fff; text-align:center; padding:24px;
+    }
+    #startBtn{
+      background:#ffffff; color:#111; border:none; padding:12px 20px; border-radius:999px;
+      font-weight:600; font-size:16px; cursor:pointer; box-shadow:0 6px 20px rgba(255,255,255,.15);
+    }
+    #hint{font-size:14px;opacity:.8;margin-top:10px}
+    .viewer{position:absolute;inset:0;z-index:1}
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div>
+      <h2>Cosmos AR Poem Card</h2>
+      <p id="hint">Tap "Start AR", then point your camera at the printed card.<br/>(Start → hold your phone over the card)</p>
+      <button id="startBtn">Start AR</button>
+    </div>
+  </div>
+  <div class="viewer" id="viewer"></div>
+
+  <script type="module">
+  import * as THREE from 'https://unpkg.com/three@0.154.0/build/three.module.js';
+  import {MindARThree} from 'https://unpkg.com/mind-ar@1.1.7/dist/mindar-image-three.prod.js';
+
+  const startBtn = document.getElementById('startBtn');
+
+  const startAR = async () => {
+    startBtn.disabled = true;
+    startBtn.textContent = 'Loading…';
+
+    const mindarThree = new MindARThree({
+      container: document.getElementById('viewer'),
+      imageTargetSrc: "./cosmos/targets.mind",
+      maxTrack: 1,
+      filterMinCF: 0.0001,
+      filterBeta: 0.01
+    });
+    const {renderer, scene, camera} = mindarThree;
+
+    const light = new THREE.HemisphereLight(0xffffff, 0x222233, 1.0);
+    scene.add(light);
+
+    const anchor = mindarThree.addAnchor(0);
+
+    const loader = new THREE.TextureLoader();
+    const makeSprite = (url, w, h) => {
+      const tex = loader.load(url);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const mat = new THREE.MeshBasicMaterial({map: tex, transparent: true, depthWrite: false, opacity: 0});
+      const geo = new THREE.PlaneGeometry(w, h);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.scale.set(0.01, 0.01, 0.01);
+      return mesh;
+    };
+
+    const moon   = makeSprite("./cosmos/moon.png",    0.78, 1.28);
+    const devilR = makeSprite("./cosmos/devil.png",   0.78, 1.28);
+    const page   = makeSprite("./cosmos/page-of-cups.png", 0.78, 1.28);
+    const flower = makeSprite("./cosmos/cosmos.png",  1.10, 1.10);
+
+    moon.position.set(-0.55,  0.05, 0.02);
+    devilR.position.set(0.00, 0.10, 0.01);
+    page.position.set( 0.55,  0.05, 0.02);
+    flower.position.set(0.00, -0.55, 0.0);
+
+    anchor.group.add(moon);
+    anchor.group.add(devilR);
+    anchor.group.add(page);
+    anchor.group.add(flower);
+
+    // Simple tween util
+    const tween = (dur, easing, onUpdate, onComplete) => {
+      const start = performance.now();
+      const loop = (now) => {
+        const t = Math.min(1, (now - start)/dur);
+        const k = easing ? easing(t) : t;
+        onUpdate(k);
+        if (t < 1) requestAnimationFrame(loop);
+        else if (onComplete) onComplete();
+      };
+      requestAnimationFrame(loop);
+    };
+    const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+
+    // Show sequence on target found
+    anchor.onTargetFound = () => {
+      [moon, devilR, page, flower].forEach(m => {
+        m.scale.set(0.01, 0.01, 0.01);
+        m.material.opacity = 0.0;
+      });
+
+      // 1) Moon
+      tween(800, easeOutCubic, k => {
+        moon.scale.set(0.01 + 0.99*k, 0.01 + 0.99*k, 1);
+        moon.material.opacity = k;
+      }, () => {
+        // 2) Devil(R)
+        tween(800, easeOutCubic, k => {
+          devilR.scale.set(0.01 + 0.99*k, 0.01 + 0.99*k, 1);
+          devilR.material.opacity = k;
+        }, () => {
+          // 3) Page of Cups
+          tween(800, easeOutCubic, k => {
+            page.scale.set(0.01 + 0.99*k, 0.01 + 0.99*k, 1);
+            page.material.opacity = k;
+          }, () => {
+            // 4) Cosmos bloom
+            tween(900, easeOutCubic, k => {
+              const s = 0.2 + 0.9*k;
+              flower.scale.set(s, s, 1);
+              flower.material.opacity = Math.min(1, k*1.2);
+            }, () => {
+              // breathing loop
+              let dir = 1;
+              const pulse = () => {
+                tween(1600, t=>t, u => {
+                  const base = 1.1;
+                  const amp = 0.02;
+                  const s = base + amp*(dir ? u : 1-u);
+                  flower.scale.set(s, s, 1);
+                }, () => {
+                  dir = 1 - dir;
+                  if (anchor.visible) requestAnimationFrame(pulse);
+                });
+              };
+              pulse();
+            });
+          });
+        });
+      });
+    };
+
+    // Fade out on lost
+    anchor.onTargetLost = () => {
+      [moon, devilR, page, flower].forEach(m => {
+        tween(400, null, k => {
+          m.material.opacity = 1 - k;
+        });
+      });
+    };
+
+    await mindarThree.start();
+    renderer.setAnimationLoop(() => renderer.render(scene, camera));
+    document.getElementById('ui').style.display = 'none';
+  };
+
+  startBtn.addEventListener('click', () => {
+    startAR().catch(err => {
+      alert("Camera start failed: " + err);
+      console.error(err);
+    });
+  });
+  </script>
+</body>
+</html>
