@@ -18,6 +18,14 @@
     #hint{font-size:14px;opacity:.8;margin-top:10px}
     .viewer{position:absolute;inset:0;z-index:1}
   </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
 <body>
   <div id="ui">
@@ -30,8 +38,8 @@
   <div class="viewer" id="viewer"></div>
 
   <script type="module">
-  import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.module.js';
-  import {MindARThree} from 'https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js';
+  import * as THREE from 'three';
+  import {MindARThree} from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js';
 
   const startBtn = document.getElementById('startBtn');
 
